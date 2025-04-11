@@ -117,19 +117,19 @@ class TestActionMonitoringFilter:
                 "openjd_session_runtime_loglevel: INFO",
                 ActionMessageKind.SESSION_RUNTIME_LOGLEVEL,
                 logging.INFO,
-                id="loglevel debug",
+                id="loglevel info",
             ),
             pytest.param(
                 "openjd_session_runtime_loglevel: WARNING",
                 ActionMessageKind.SESSION_RUNTIME_LOGLEVEL,
                 logging.WARNING,
-                id="loglevel debug",
+                id="loglevel warning",
             ),
             pytest.param(
                 "openjd_session_runtime_loglevel: ERROR",
                 ActionMessageKind.SESSION_RUNTIME_LOGLEVEL,
                 logging.ERROR,
-                id="loglevel debug",
+                id="loglevel error",
             ),
         ),
     )
@@ -307,6 +307,22 @@ class TestActionMonitoringFilter:
                 "openjd_env: F😁=bar",
                 id="env, non-latin",
             ),
+            pytest.param(
+                "openjd_redacted_env: foo",
+                id="redacted_env, missing assignment",
+            ),
+            pytest.param(
+                "openjd_redacted_env: foo =value",
+                id="redacted_env, extra whitespace",
+            ),
+            pytest.param(
+                "openjd_redacted_env: 1F_F_12=bar",
+                id="redacted_env, start with digit",
+            ),
+            pytest.param(
+                "openjd_redacted_env: F😁=bar",
+                id="redacted_env, non-latin",
+            ),
         ),
     )
     def test_malformed_set_env_assigment(self, queue_handler: QueueHandler, message: str) -> None:
@@ -340,6 +356,18 @@ class TestActionMonitoringFilter:
             pytest.param(
                 " openjd_env: foo=bar",
                 id="env, leading whitespace",
+            ),
+            pytest.param(
+                "openjd_redacted_env:foo=bar",
+                id="redacted_env, no space",
+            ),
+            pytest.param(
+                "OPENJD_REDACTED_ENV: foo=bar",
+                id="redacted_env, uppercase",
+            ),
+            pytest.param(
+                " openjd_redacted_env: foo=bar",
+                id="redacted_env, leading whitespace",
             ),
             pytest.param(
                 "openjd_unset_env:foo",
@@ -470,3 +498,255 @@ class TestActionMonitoringFilter:
         callback_mock.assert_not_called()
         assert message_queue.qsize() == 1
         assert "Exception: Surprise!" in message_queue.get(block=False).getMessage()
+
+    def test_redacted_env_redacts_value(
+        self, message_queue: SimpleQueue, queue_handler: QueueHandler
+    ) -> None:
+        """Test that openjd_redacted_env properly redacts values in logs."""
+        # GIVEN
+        message = "openjd_redacted_env: PASSWORD=secret123"
+        h = sha256()
+        h.update(message.encode("utf-8"))
+        logger_name = "redacted" + h.hexdigest()[0:32]
+        callback_mock = MagicMock()
+        filter = ActionMonitoringFilter(
+            session_id="foo", callback=callback_mock, enabled_extensions=["REDACTED_ENV_VARS"]
+        )
+        log = self.build_logger(logger_name, queue_handler, filter)
+        loga = LoggerAdapter(log, extra={"session_id": "foo"})
+
+        # WHEN
+        loga.info(message)
+
+        # THEN
+        # Check that the callback was called with the correct parameters
+        callback_mock.assert_called_once_with(
+            ActionMessageKind.ENV, {"name": "PASSWORD", "value": "secret123"}, False
+        )
+
+        # Check that the message in the log is redacted
+        assert message_queue.qsize() == 1
+        log_message = message_queue.get(block=False).getMessage()
+        assert "openjd_redacted_env: PASSWORD=********" in log_message
+        assert "secret123" not in log_message
+
+    def test_redacted_env_with_warning(
+        self, message_queue: SimpleQueue, queue_handler: QueueHandler, monkeypatch
+    ) -> None:
+        """Test that redacted_env messages log a warning when the extension is not enabled."""
+        # GIVEN
+        mock_log = MagicMock()
+        monkeypatch.setattr("openjd.sessions._action_filter.LOG", mock_log)
+
+        message = "openjd_redacted_env: SECRET_VAR=secret_value"
+        h = sha256()
+        h.update(message.encode("utf-8"))
+        logger_name = "redacted_no_ext" + h.hexdigest()[0:32]
+        callback_mock = MagicMock()
+        filter = ActionMonitoringFilter(
+            session_id="foo", callback=callback_mock, enabled_extensions=[]  # No extensions enabled
+        )
+        log = self.build_logger(logger_name, queue_handler, filter)
+        loga = LoggerAdapter(log, extra={"session_id": "foo"})
+
+        # WHEN
+        loga.info(message)
+
+        # THEN
+        mock_log.warning.assert_called_once()
+        assert "REDACTED_ENV_VARS extension is not enabled" in mock_log.warning.call_args[0][0]
+
+        # The callback should NOT be called since our implementation changed
+        callback_mock.assert_not_called()
+
+        # Check that the message in the log is redacted
+        assert message_queue.qsize() == 1, "Message passed through"
+        log_message = message_queue.get(block=False).getMessage()
+        assert "SECRET_VAR=********" in log_message
+        assert "secret_value" not in log_message
+
+    def test_redacted_env_uses_fixed_length_redaction(
+        self, message_queue: SimpleQueue, queue_handler: QueueHandler
+    ) -> None:
+        """Test that openjd_redacted_env uses a fixed-length redaction regardless of value length."""
+        # GIVEN
+        # Test with a very short value
+        short_message = "openjd_redacted_env: KEY=x"
+        h1 = sha256()
+        h1.update(short_message.encode("utf-8"))
+        logger_name1 = "redacted_short" + h1.hexdigest()[0:32]
+        callback_mock1 = MagicMock()
+        filter1 = ActionMonitoringFilter(session_id="foo", callback=callback_mock1)
+        log1 = self.build_logger(logger_name1, queue_handler, filter1)
+        loga1 = LoggerAdapter(log1, extra={"session_id": "foo"})
+
+        # Test with a very long value
+        long_message = "openjd_redacted_env: TOKEN=abcdefghijklmnopqrstuvwxyz1234567890"
+        h2 = sha256()
+        h2.update(long_message.encode("utf-8"))
+        logger_name2 = "redacted_long" + h2.hexdigest()[0:32]
+        callback_mock2 = MagicMock()
+        filter2 = ActionMonitoringFilter(session_id="foo", callback=callback_mock2)
+        log2 = self.build_logger(logger_name2, queue_handler, filter2)
+        loga2 = LoggerAdapter(log2, extra={"session_id": "foo"})
+
+        expected_redacted_format = "********"
+
+        # WHEN
+        loga1.info(short_message)
+        loga2.info(long_message)
+
+        # THEN
+        # Check that both messages use the same fixed-length redaction
+        assert message_queue.qsize() == 2, "Both messages passed through"
+
+        log_message1 = message_queue.get(block=False).getMessage()
+        assert log_message1 == f"openjd_redacted_env: KEY={expected_redacted_format}"
+
+        log_message2 = message_queue.get(block=False).getMessage()
+        assert log_message2 == f"openjd_redacted_env: TOKEN={expected_redacted_format}"
+
+    def test_redacted_env_redacts_subsequent_occurrences(
+        self, message_queue: SimpleQueue, queue_handler: QueueHandler
+    ) -> None:
+        """Test that values from openjd_redacted_env are redacted in all subsequent log messages."""
+        # GIVEN
+        # First set up the redacted env value
+        redacted_message = "openjd_redacted_env: PASSWORD=supersecret123"
+        h1 = sha256()
+        h1.update(redacted_message.encode("utf-8"))
+        logger_name1 = "redacted_setup" + h1.hexdigest()[0:32]
+        callback_mock = MagicMock()
+        filter = ActionMonitoringFilter(
+            session_id="foo", callback=callback_mock, enabled_extensions=["REDACTED_ENV_VARS"]
+        )
+        log1 = self.build_logger(logger_name1, queue_handler, filter)
+        loga1 = LoggerAdapter(log1, extra={"session_id": "foo"})
+
+        # WHEN
+        # First log the redacted_env message to set up the value
+        loga1.info(redacted_message)
+
+        # Then log a regular message containing the sensitive value
+        regular_message = "Here is the password: supersecret123 for your reference"
+        loga1.info(regular_message)
+
+        # THEN
+        # Check that both messages were logged
+        assert message_queue.qsize() == 2, "Both messages should be in the queue"
+
+        # First message should have redacted the value in the openjd_redacted_env line
+        first_log = message_queue.get(block=False).getMessage()
+        assert first_log == "openjd_redacted_env: PASSWORD=********"
+        assert "supersecret123" not in first_log
+
+        # Second message should have redacted the sensitive value
+        second_log = message_queue.get(block=False).getMessage()
+        assert "supersecret123" not in second_log
+        assert "Here is the password: ********" in second_log
+
+        # The callback should have been called with the actual value for env processing
+        callback_mock.assert_any_call(
+            ActionMessageKind.ENV, {"name": "PASSWORD", "value": "supersecret123"}, False
+        )
+
+    def test_redacted_env_handles_multiple_values(
+        self, message_queue: SimpleQueue, queue_handler: QueueHandler
+    ) -> None:
+        """Test that multiple redacted values are all properly redacted in logs."""
+        # GIVEN
+        callback_mock = MagicMock()
+        filter = ActionMonitoringFilter(
+            session_id="foo", callback=callback_mock, enabled_extensions=["REDACTED_ENV_VARS"]
+        )
+        log = self.build_logger("multiple_redacted", queue_handler, filter)
+        loga = LoggerAdapter(log, extra={"session_id": "foo"})
+
+        # WHEN
+        # Set up multiple redacted values
+        loga.info("openjd_redacted_env: PASSWORD=password123")
+        loga.info("openjd_redacted_env: API_KEY=abcdef123456")
+
+        # Log a message containing both sensitive values
+        loga.info("Using PASSWORD=password123 and API_KEY=abcdef123456 for authentication")
+
+        # THEN
+        # Skip the first two messages which are the redacted_env declarations
+        message_queue.get(block=False)
+        message_queue.get(block=False)
+
+        # Check that the third message has both values redacted
+        final_message = message_queue.get(block=False).getMessage()
+        assert "password123" not in final_message
+        assert "abcdef123456" not in final_message
+        assert "Using PASSWORD=******** and API_KEY=******** for authentication" in final_message
+
+    def test_redacted_env_with_extension(
+        self, message_queue: SimpleQueue, queue_handler: QueueHandler
+    ) -> None:
+        """Test that redacted_env messages set environment variables when the extension is enabled."""
+        # GIVEN
+        message = "openjd_redacted_env: PASSWORD=secret123"
+        h = sha256()
+        h.update(message.encode("utf-8"))
+        logger_name = "redacted_with_ext" + h.hexdigest()[0:32]
+        callback_mock = MagicMock()
+        filter = ActionMonitoringFilter(
+            session_id="foo", callback=callback_mock, enabled_extensions=["REDACTED_ENV_VARS"]
+        )
+        log = self.build_logger(logger_name, queue_handler, filter)
+        loga = LoggerAdapter(log, extra={"session_id": "foo"})
+
+        # WHEN
+        loga.info(message)
+
+        # THEN
+        # The callback should be called with the environment variable info
+        callback_mock.assert_called_once_with(
+            ActionMessageKind.ENV, {"name": "PASSWORD", "value": "secret123"}, False
+        )
+
+        # The message should be redacted in the logs
+        assert message_queue.qsize() == 1
+        log_message = message_queue.get(block=False).getMessage()
+        assert "openjd_redacted_env: PASSWORD=********" in log_message
+        assert "secret123" not in log_message
+
+    def test_malformed_redacted_env_commands(
+        self, message_queue: SimpleQueue, queue_handler: QueueHandler
+    ) -> None:
+        """Test handling of malformed redacted_env commands with spaces or missing equals sign."""
+        # GIVEN
+        callback_mock = MagicMock()
+        filter = ActionMonitoringFilter(
+            session_id="foo", callback=callback_mock, enabled_extensions=["REDACTED_ENV_VARS"]
+        )
+        log = self.build_logger("malformed_redacted", queue_handler, filter)
+        loga = LoggerAdapter(log, extra={"session_id": "foo"})
+
+        # Case 1: Space after key (key =value)
+        message1 = "openjd_redacted_env: PASSWORD =secret123"
+
+        # Case 2: Missing equals sign (keyvalue)
+        message2 = "openjd_redacted_env: SECRETsensitivedata"
+
+        # WHEN
+        loga.info(message1)
+        loga.info(message2)
+
+        # THEN
+        # Check that both messages were processed
+        assert message_queue.qsize() == 2
+
+        # For Case 1 (key =value), we should still try to redact the value
+        log_message1 = message_queue.get(block=False).getMessage()
+        assert "openjd_redacted_env: PASSWORD =********" in log_message1
+        assert "secret123" not in log_message1
+
+        # For Case 2 (missing equals), we should redact the entire content after the prefix
+        log_message2 = message_queue.get(block=False).getMessage()
+        assert "openjd_redacted_env: ********" in log_message2
+        assert "SECRETsensitivedata" not in log_message2
+
+        # Neither case should set an environment variable
+        callback_mock.assert_not_called()

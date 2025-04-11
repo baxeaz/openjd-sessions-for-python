@@ -6,7 +6,7 @@ import json
 import logging
 import re
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from ._logging import LOG, LogContent, LogExtraInfo
 
@@ -18,6 +18,7 @@ class ActionMessageKind(Enum):
     STATUS = "status"  # A status message
     FAIL = "fail"  # A failure message
     ENV = "env"  # Defining an environment variable
+    REDACTED_ENV = "redacted_env"  # Defining an environment variable with redacted value in logs
     UNSET_ENV = "unset_env"  # Unsetting an environment variable
 
     # The following are not in the spec, but are utility provided by this runtime.
@@ -33,7 +34,7 @@ filter_regex = (
 )
 filter_matcher = re.compile(filter_regex)
 
-openjd_env_actions_filter_regex = "^(openjd_env|openjd_unset_env)"
+openjd_env_actions_filter_regex = "^(openjd_env|openjd_redacted_env|openjd_unset_env)"
 openjd_env_actions_filter_matcher = re.compile(openjd_env_actions_filter_regex)
 
 # A regex for matching the assignment of a value to an environment variable
@@ -99,6 +100,7 @@ class ActionMonitoringFilter(logging.Filter):
         session_id: str,
         callback: Callable[[ActionMessageKind, Any, bool], None],
         suppress_filtered: bool = False,
+        enabled_extensions: Optional[list[str]] = None,
     ):
         """
         Args:
@@ -111,19 +113,75 @@ class ActionMonitoringFilter(logging.Filter):
                 with a message payload when an Open Job Description message is found in the log.
             suppress_filtered (bool, optional): If True, then all Open Job Description messages
                 will be filtered out of the log. Defaults to True.
+            enabled_extensions (Optional[list[str]]): A list of enabled extensions for this session.
         """
         super().__init__(name)
         self._session_id = session_id
         self._callback = callback
         self._suppress_filtered = suppress_filtered
+        self._enabled_extensions = enabled_extensions or []
+        # Initialize list to store sensitive values for redaction
+        self._redacted_values: list[str] = []  # Using a list instead of a set to maintain order
         self._internal_handlers = {
             ActionMessageKind.PROGRESS: self._handle_progress,
             ActionMessageKind.STATUS: self._handle_status,
             ActionMessageKind.FAIL: self._handle_fail,
             ActionMessageKind.ENV: self._handle_env,
+            ActionMessageKind.REDACTED_ENV: self._handle_redacted_env,
             ActionMessageKind.UNSET_ENV: self._handle_unset_env,
             ActionMessageKind.SESSION_RUNTIME_LOGLEVEL: self._handle_session_runtime_loglevel,
         }
+
+    def check_redact_message(self, record: logging.LogRecord):
+        """Check if the log message contains any sensitive values that need to be redacted.
+
+        Args:
+            record (logging.LogRecord): The log record to check.
+        """
+        # Check if we need to redact any sensitive values from the log message
+        if (
+            hasattr(self, "_redacted_values")
+            and self._redacted_values
+            and isinstance(record.msg, str)
+        ):
+            # First find all segments that need redaction
+            segments_to_redact = []
+            for value in self._redacted_values:
+                if value:
+                    start = 0
+                    while True:
+                        pos = record.msg.find(value, start)
+                        if pos == -1:
+                            break
+                        segments_to_redact.append((pos, pos + len(value)))
+                        start = pos + 1
+
+            # If we found segments to redact, merge overlapping segments
+            if segments_to_redact:
+                # Sort segments by start position
+                segments_to_redact.sort()
+
+                # Merge overlapping segments
+                merged_segments = []
+                current_start, current_end = segments_to_redact[0]
+
+                for start, end in segments_to_redact[1:]:
+                    if start <= current_end:
+                        # Segments overlap, extend current segment
+                        current_end = max(current_end, end)
+                    else:
+                        # No overlap, add current segment and start new one
+                        merged_segments.append((current_start, current_end))
+                        current_start, current_end = start, end
+
+                # Add the last segment
+                merged_segments.append((current_start, current_end))
+
+                # Apply redactions from end to start to avoid position shifts
+                msg_chars = list(record.msg)
+                for start, end in reversed(merged_segments):
+                    msg_chars[start:end] = list("*" * 8)  # Always use 8 asterisks for redaction
+                record.msg = "".join(msg_chars)
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Called automatically by Python's logging subsystem when a log record
@@ -139,57 +197,80 @@ class ActionMonitoringFilter(logging.Filter):
             bool: If true then the Python logger will keep the record in the log,
                   else it will remove it.
         """
-        if not hasattr(record, "session_id") or getattr(record, "session_id") != self._session_id:
-            # Not a record for us to process
-            return True
-        if not isinstance(record.msg, str):
-            # If something sends a non-string to the logger (e.g. via logger.exception) then
-            # don't try to string match it.
-            return True
-        match = filter_matcher.match(record.msg)
-        if match and match.lastindex is not None:
-            message = match.group(match.lastindex)
-            # Note: keys of match.groupdict() are the names of named groups in the regex
-            matched_named_groups = tuple(k for k, v in match.groupdict().items() if v is not None)
-            if len(matched_named_groups) > 1:
-                # The only way that this happens is if filter_matcher is constructed incorrectly.
-                all_matched_groups = ",".join(k for k in matched_named_groups)
-                LOG.error(
-                    f"Open Job Description: Malformed output stream filter matched multiple kinds ({all_matched_groups})",
-                    extra=LogExtraInfo(openjd_log_content=LogContent.COMMAND_OUTPUT),
+        try:
+            if (
+                not hasattr(record, "session_id")
+                or getattr(record, "session_id") != self._session_id
+            ):
+                # Not a record for us to process
+                return True
+            if not isinstance(record.msg, str):
+                # If something sends a non-string to the logger (e.g. via logger.exception) then
+                # don't try to string match it.
+                return True
+
+            match = filter_matcher.match(record.msg)
+            if match and match.lastindex is not None:
+                message = match.group(match.lastindex)
+                # Note: keys of match.groupdict() are the names of named groups in the regex
+                matched_named_groups = tuple(
+                    k for k, v in match.groupdict().items() if v is not None
                 )
-                return True
-            message_kind = ActionMessageKind(matched_named_groups[0])
-            try:
-                handler = self._internal_handlers[message_kind]
-            except KeyError:
-                LOG.error(
-                    f"Open Job Description: Unhandled message kind ({message_kind.value})",
-                    extra=LogExtraInfo(openjd_log_content=LogContent.COMMAND_OUTPUT),
+                if len(matched_named_groups) > 1:
+                    # The only way that this happens is if filter_matcher is constructed incorrectly.
+                    all_matched_groups = ",".join(k for k in matched_named_groups)
+                    LOG.error(
+                        f"Open Job Description: Malformed output stream filter matched multiple kinds ({all_matched_groups})",
+                        extra=LogExtraInfo(openjd_log_content=LogContent.COMMAND_OUTPUT),
+                    )
+                    return True
+                message_kind = ActionMessageKind(matched_named_groups[0])
+                try:
+                    handler = self._internal_handlers[message_kind]
+                except KeyError:
+                    LOG.error(
+                        f"Open Job Description: Unhandled message kind ({message_kind.value})",
+                        extra=LogExtraInfo(openjd_log_content=LogContent.COMMAND_OUTPUT),
+                    )
+                    return True
+
+                # Check if this is a redacted_env message and the extension is not enabled
+                if (
+                    message_kind == ActionMessageKind.REDACTED_ENV
+                    and "REDACTED_ENV_VARS" not in self._enabled_extensions
+                ):
+                    LOG.warning(
+                        "Received openjd_redacted_env message but REDACTED_ENV_VARS extension is not enabled",
+                        extra=LogExtraInfo(openjd_log_content=LogContent.COMMAND_OUTPUT),
+                    )
+                    # We still process the message - just log the warning
+
+                try:
+                    handler(message)
+
+                except ValueError as e:
+                    record.msg = record.msg + f" -- ERROR: {str(e)}"
+                    # There was an error. Don't suppress the message from the log.
+                    return True
+                return not self._suppress_filtered
+
+            # Check for "almost" matching openjd_env and openjd_unset_env commands
+            lower_case_trimmed_msg: str = record.msg.lstrip().lower()
+            if openjd_env_actions_filter_matcher.match(lower_case_trimmed_msg):
+                # There was a minor error like spaces or case in the env commands
+                err_message = (
+                    f"Open Job Description: Incorrectly formatted openjd env command ({record.msg})"
                 )
-                return True
-            try:
-                handler(message)
-            except ValueError as e:
-                record.msg = record.msg + f" -- ERROR: {str(e)}"
-                # There was an error. Don't suppress the message from the log.
-                return True
-            return not self._suppress_filtered
+                record.msg = record.msg + f" -- ERROR: {err_message}"
 
-        # Check for "almost" matching openjd_env and openjd_unset_env commands
-        lower_case_trimmed_msg: str = record.msg.lstrip().lower()
-        if openjd_env_actions_filter_matcher.match(lower_case_trimmed_msg):
-            # There was a minor error like spaces or case in the env commands
-            err_message = (
-                f"Open Job Description: Incorrectly formatted openjd env command ({record.msg})"
-            )
-            record.msg = record.msg + f" -- ERROR: {err_message}"
+                # Callback to cancel the action and mark it as FAILED
+                self._callback(ActionMessageKind.FAIL, err_message, True)
+                return True
 
-            # Callback to cancel the action and mark it as FAILED
-            self._callback(ActionMessageKind.FAIL, err_message, True)
             return True
-
-        return True
+        finally:
+            # Always check for redaction before returning
+            self.check_redact_message(record)
 
     def _handle_progress(self, message: str) -> None:
         """Local handling of Progress messages. Processes the message and then
@@ -292,3 +373,69 @@ class ActionMonitoringFilter(logging.Filter):
             raise ValueError(
                 f"Unknown log level: {message}. Known values: {','.join(levels.keys())}"
             )
+
+    def _handle_redacted_env(self, message: str) -> None:
+        """Local handling of the Redacted Env messages. Similar to _handle_env but
+        redacts the value in logs and adds it to the set of values to redact in future logs.
+
+        Args:
+            message (str): The message after the leading 'openjd_redacted_env: ' prefix
+        """
+        message = message.lstrip()
+
+        # For redacted_env:
+        # 1. Always handle redaction
+        # 2. If extension not enabled:
+        #    - Behave like regular env (call callback with error for malformed)
+        #    - Don't set env var for valid cases
+        # 3. If extension enabled:
+        #    - Just log warning for malformed (no callback)
+        #    - Set env var for valid cases
+
+        # Case 1: Missing equals sign
+        if "=" not in message:
+            # Add entire content to redaction list
+            if message and message not in self._redacted_values:
+                self._redacted_values.append(message)
+            if "REDACTED_ENV_VARS" in self._enabled_extensions:
+                LOG.warning(
+                    "Malformed openjd_redacted_env command: missing equals sign. No environment variable will be set.",
+                    extra=LogExtraInfo(openjd_log_content=LogContent.COMMAND_OUTPUT),
+                )
+            else:
+                err_message = "Failed to parse environment variable assignment."
+                self._callback(ActionMessageKind.ENV, err_message, True)
+            return
+
+        # Split into name and value
+        parts = message.split("=", 1)
+        name = parts[0].rstrip()  # Remove trailing spaces
+        value = parts[1]  # Keep leading spaces in value
+
+        # Add value to redaction list if it's not empty
+        if value and value not in self._redacted_values:
+            # Insert maintaining descending length order
+            inserted = False
+            for i, existing_value in enumerate(self._redacted_values):
+                if len(value) >= len(existing_value):
+                    self._redacted_values.insert(i, value)
+                    inserted = True
+                    break
+            if not inserted:
+                self._redacted_values.append(value)
+
+        # Case 2: Extra whitespace before equals or invalid variable name
+        if name != parts[0] or not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name):
+            if "REDACTED_ENV_VARS" in self._enabled_extensions:
+                LOG.warning(
+                    "Malformed openjd_redacted_env command: invalid variable name. No environment variable will be set.",
+                    extra=LogExtraInfo(openjd_log_content=LogContent.COMMAND_OUTPUT),
+                )
+            else:
+                err_message = "Failed to parse environment variable assignment."
+                self._callback(ActionMessageKind.ENV, err_message, True)
+            return
+
+        # Case 3: Valid command - only set environment variable if extension enabled
+        if "REDACTED_ENV_VARS" in self._enabled_extensions:
+            self._callback(ActionMessageKind.ENV, {"name": name, "value": value}, False)

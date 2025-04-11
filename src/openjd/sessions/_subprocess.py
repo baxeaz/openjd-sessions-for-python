@@ -274,11 +274,19 @@ class LoggingSubprocess(object):
                 # https://docs.python.org/2/library/subprocess.html#subprocess.CREATE_NEW_PROCESS_GROUP
                 popen_args["creationflags"] = CREATE_NEW_PROCESS_GROUP
 
+            # Get the command string for logging
             cmd_line_for_logger: str
             if is_posix():
                 cmd_line_for_logger = shlex.join(command)
             else:
-                cmd_line_for_logger = list2cmdline(self._args)
+                # On Windows, we need to handle redaction in command strings
+                cmd_line = list2cmdline(self._args)
+                # If this is a redacted env command, redact everything after the token
+                if "openjd_redacted_env:" in cmd_line:
+                    prefix, rest = cmd_line.split("openjd_redacted_env:", 1)
+                    cmd_line_for_logger = f"{prefix}openjd_redacted_env:********"
+                else:
+                    cmd_line_for_logger = cmd_line
             self._logger.info(
                 "Running command %s",
                 cmd_line_for_logger,

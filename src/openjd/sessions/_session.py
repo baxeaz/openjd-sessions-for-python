@@ -318,6 +318,7 @@ class Session(object):
         callback: Optional[SessionCallbackType] = None,
         os_env_vars: Optional[dict[str, str]] = None,
         session_root_directory: Optional[Path] = None,
+        enabled_extensions: Optional[list[str]] = None,
     ):
         """
         Arguments:
@@ -389,9 +390,14 @@ class Session(object):
                 )
         self._reset_action_state()
 
+        # Store the enabled extensions
+        self._enabled_extensions = enabled_extensions or []
+
         # Set up our logging hook & callback
         self._log_filter = ActionMonitoringFilter(
-            session_id=self._session_id, callback=self._action_log_filter_callback
+            session_id=self._session_id,
+            callback=self._action_log_filter_callback,
+            enabled_extensions=self._enabled_extensions,
         )
         LOG.addFilter(self._log_filter)
         self._logger = LoggerAdapter(LOG, extra={"session_id": self._session_id})
