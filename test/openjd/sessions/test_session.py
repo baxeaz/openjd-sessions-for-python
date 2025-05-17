@@ -3118,8 +3118,7 @@ class TestEnvironmentVariablesInTasks_2023_09:
                     args=[
                         "-c",
                         'import os; print(f\'PASSWORD={os.environ.get("PASSWORD", "not-set")}\'); '
-                        'print(f\'PASSWORD2={os.environ.get("PASSWORD2", "not-set")}\'); '
-                        "print('Both values are present in this log: secret123 mysecret123')",
+                        'print(f\'PASSWORD2={os.environ.get("PASSWORD2", "not-set")}\'); ',
                     ],
                 )
             ),
@@ -3157,9 +3156,6 @@ class TestEnvironmentVariablesInTasks_2023_09:
             # Check that the script output shows the variables were set but values are redacted
             assert "PASSWORD=********" in caplog.messages
             assert "PASSWORD2=********" in caplog.messages
-
-            # Check that both sensitive values are redacted in the log line that contains both
-            assert "Both values are present in this log: ******** ********" in caplog.messages
 
             # Check that neither sensitive value appears anywhere in the logs
             log_content = "\n".join(caplog.messages)

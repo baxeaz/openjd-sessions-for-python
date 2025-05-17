@@ -120,8 +120,6 @@ class ActionMonitoringFilter(logging.Filter):
         self._callback = callback
         self._suppress_filtered = suppress_filtered
         self._enabled_extensions = enabled_extensions or []
-        # Initialize list to store sensitive values for redaction
-        self._redacted_values: list[str] = []  # Using a list instead of a set to maintain order
         self._internal_handlers = {
             ActionMessageKind.PROGRESS: self._handle_progress,
             ActionMessageKind.STATUS: self._handle_status,
@@ -248,6 +246,14 @@ class ActionMonitoringFilter(logging.Filter):
                 try:
                     handler(message)
 
+                    # Special case for redacted_env: we need to redact the original message
+                    # immediately since it contains the sensitive value
+                    if message_kind == ActionMessageKind.REDACTED_ENV:
+                        # Apply redaction to the current record
+                        from ._redaction import RedactionRegistry
+                        if isinstance(record.msg, str):
+                            record.msg = RedactionRegistry.get_instance().redact_message(record.msg)
+
                 except ValueError as e:
                     record.msg = record.msg + f" -- ERROR: {str(e)}"
                     # There was an error. Don't suppress the message from the log.
@@ -269,8 +275,8 @@ class ActionMonitoringFilter(logging.Filter):
 
             return True
         finally:
-            # Always check for redaction before returning
-            self.check_redact_message(record)
+            # For non-redacted_env messages, redaction is handled by the LoggerAdapter
+            pass
 
     def _handle_progress(self, message: str) -> None:
         """Local handling of Progress messages. Processes the message and then
@@ -395,8 +401,9 @@ class ActionMonitoringFilter(logging.Filter):
         # Case 1: Missing equals sign
         if "=" not in message:
             # Add entire content to redaction list
-            if message and message not in self._redacted_values:
-                self._redacted_values.append(message)
+            if message:
+                from ._redaction import RedactionRegistry
+                RedactionRegistry.get_instance().add_redacted_value(message)
             if "REDACTED_ENV_VARS" in self._enabled_extensions:
                 LOG.warning(
                     "Malformed openjd_redacted_env command: missing equals sign. No environment variable will be set.",
@@ -413,16 +420,9 @@ class ActionMonitoringFilter(logging.Filter):
         value = parts[1]  # Keep leading spaces in value
 
         # Add value to redaction list if it's not empty
-        if value and value not in self._redacted_values:
-            # Insert maintaining descending length order
-            inserted = False
-            for i, existing_value in enumerate(self._redacted_values):
-                if len(value) >= len(existing_value):
-                    self._redacted_values.insert(i, value)
-                    inserted = True
-                    break
-            if not inserted:
-                self._redacted_values.append(value)
+        if value:
+            from ._redaction import RedactionRegistry
+            RedactionRegistry.get_instance().add_redacted_value(value)
 
         # Case 2: Extra whitespace before equals or invalid variable name
         if name != parts[0] or not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name):
