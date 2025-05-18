@@ -144,6 +144,13 @@ class ActionMonitoringFilter(logging.Filter):
             and self._redacted_values
             and isinstance(record.msg, str)
         ):
+            # If we have args, first do string formatting, then redact
+            try:
+                record.msg = record.msg % record.args
+                record.args = ()  # Clear args since we've done the formatting
+            except Exception:
+                # If string formatting fails, fall back to just redacting the message
+                pass
             # First find all segments that need redaction
             segments_to_redact = []
             for value in self._redacted_values:
@@ -373,6 +380,26 @@ class ActionMonitoringFilter(logging.Filter):
             raise ValueError(
                 f"Unknown log level: {message}. Known values: {','.join(levels.keys())}"
             )
+
+    def pre_redact_command(self, command_str: str) -> str:
+        """Pre-redact sensitive information in command strings before they're processed by the regular redaction mechanism.
+        
+        This is used for cases where a command string might contain sensitive information that needs to be
+        redacted before it's passed to the logger, especially for commands containing 'openjd_redacted_env:'.
+        
+        Args:
+            command_str: The command string that might contain sensitive information
+            
+        Returns:
+            The command string with sensitive information redacted
+        """
+        # Fast path for the common case where there's no redaction needed
+        if "openjd_redacted_env:" not in command_str:
+            return command_str
+            
+        # If this is a redacted env command, redact everything after the token
+        prefix, rest = command_str.split("openjd_redacted_env:", 1)
+        return f"{prefix}openjd_redacted_env:********"
 
     def _handle_redacted_env(self, message: str) -> None:
         """Local handling of the Redacted Env messages. Similar to _handle_env but
