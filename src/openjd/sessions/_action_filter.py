@@ -10,7 +10,28 @@ from typing import Any, Callable, Optional
 
 from ._logging import LOG, LogContent, LogExtraInfo
 
-__all__ = ("ActionMessageKind", "ActionMonitoringFilter")
+__all__ = ("ActionMessageKind", "ActionMonitoringFilter", "pre_redact_command")
+
+
+def pre_redact_command(command_str: str) -> str:
+    """Pre-redact sensitive information in command strings before they're processed by the regular redaction mechanism.
+    
+    This is used for cases where a command string might contain sensitive information that needs to be
+    redacted before it's passed to the logger, especially for commands containing 'openjd_redacted_env:'.
+    
+    Args:
+        command_str: The command string that might contain sensitive information
+        
+    Returns:
+        The command string with sensitive information redacted
+    """
+    # Fast path for the common case where there's no redaction needed
+    if "openjd_redacted_env:" not in command_str:
+        return command_str
+        
+    # If this is a redacted env command, redact everything after the token
+    prefix, rest = command_str.split("openjd_redacted_env:", 1)
+    return f"{prefix}openjd_redacted_env:********"
 
 
 class ActionMessageKind(Enum):
@@ -381,25 +402,6 @@ class ActionMonitoringFilter(logging.Filter):
                 f"Unknown log level: {message}. Known values: {','.join(levels.keys())}"
             )
 
-    def pre_redact_command(self, command_str: str) -> str:
-        """Pre-redact sensitive information in command strings before they're processed by the regular redaction mechanism.
-        
-        This is used for cases where a command string might contain sensitive information that needs to be
-        redacted before it's passed to the logger, especially for commands containing 'openjd_redacted_env:'.
-        
-        Args:
-            command_str: The command string that might contain sensitive information
-            
-        Returns:
-            The command string with sensitive information redacted
-        """
-        # Fast path for the common case where there's no redaction needed
-        if "openjd_redacted_env:" not in command_str:
-            return command_str
-            
-        # If this is a redacted env command, redact everything after the token
-        prefix, rest = command_str.split("openjd_redacted_env:", 1)
-        return f"{prefix}openjd_redacted_env:********"
 
     def _handle_redacted_env(self, message: str) -> None:
         """Local handling of the Redacted Env messages. Similar to _handle_env but

@@ -19,6 +19,7 @@ from ._linux._sudo import find_sudo_child_process_group_id
 from ._logging import LoggerAdapter, LogContent, LogExtraInfo
 from ._os_checker import is_linux, is_posix, is_windows
 from ._session_user import PosixSessionUser, WindowsSessionUser, SessionUser
+from ._action_filter import pre_redact_command
 
 if is_windows():  # pragma: nocover
     from subprocess import CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW  # type: ignore
@@ -282,7 +283,7 @@ class LoggingSubprocess(object):
                 # On Windows, we need to handle redaction in command strings
                 cmd_line = list2cmdline(self._args)
                 # Pre-redact any sensitive information in the command string
-                cmd_line_for_logger = self._logger.filters[0].pre_redact_command(cmd_line)
+                cmd_line_for_logger = pre_redact_command(cmd_line)
             self._logger.info(
                 "Running command %s",
                 cmd_line_for_logger,
