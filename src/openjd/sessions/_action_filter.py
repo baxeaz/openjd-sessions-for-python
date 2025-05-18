@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Any, Callable, Optional
 
 from ._logging import LOG, LogContent, LogExtraInfo
+from ._redaction import RedactionRegistry
 
 __all__ = ("ActionMessageKind", "ActionMonitoringFilter")
 
@@ -250,7 +251,6 @@ class ActionMonitoringFilter(logging.Filter):
                     # immediately since it contains the sensitive value
                     if message_kind == ActionMessageKind.REDACTED_ENV:
                         # Apply redaction to the current record
-                        from ._redaction import RedactionRegistry
                         if isinstance(record.msg, str):
                             record.msg = RedactionRegistry.get_instance().redact_message(record.msg)
 
@@ -402,7 +402,6 @@ class ActionMonitoringFilter(logging.Filter):
         if "=" not in message:
             # Add entire content to redaction list
             if message:
-                from ._redaction import RedactionRegistry
                 RedactionRegistry.get_instance().add_redacted_value(message)
             if "REDACTED_ENV_VARS" in self._enabled_extensions:
                 LOG.warning(
@@ -421,7 +420,6 @@ class ActionMonitoringFilter(logging.Filter):
 
         # Add value to redaction list if it's not empty
         if value:
-            from ._redaction import RedactionRegistry
             RedactionRegistry.get_instance().add_redacted_value(value)
 
         # Case 2: Extra whitespace before equals or invalid variable name

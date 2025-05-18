@@ -281,12 +281,10 @@ class LoggingSubprocess(object):
             else:
                 # On Windows, we need to handle redaction in command strings
                 cmd_line = list2cmdline(self._args)
-                # If this is a redacted env command, redact everything after the token
-                if "openjd_redacted_env:" in cmd_line:
-                    prefix, rest = cmd_line.split("openjd_redacted_env:", 1)
-                    cmd_line_for_logger = f"{prefix}openjd_redacted_env:********"
-                else:
-                    cmd_line_for_logger = cmd_line
+                # Pre-redact any sensitive information in the command string
+                from ._redaction import pre_redact_command
+
+                cmd_line_for_logger = pre_redact_command(cmd_line)
             self._logger.info(
                 "Running command %s",
                 cmd_line_for_logger,

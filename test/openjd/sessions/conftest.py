@@ -186,7 +186,24 @@ def queue_handler(message_queue: SimpleQueue) -> QueueHandler:
 @pytest.fixture(scope="function")
 def session_id() -> str:
     return "some Id"
+
+
 @pytest.fixture(autouse=True)
+def reset_redaction_registry():
+    """Reset the redaction registry before and after each test."""
+    try:
+        # Import here to avoid circular imports
+        from openjd.sessions._redaction import RedactionRegistry
+
+        # Reset before test
+        RedactionRegistry._instance = None
+        yield
+        # Reset after test
+        RedactionRegistry._instance = None
+    except ImportError:
+        # If the module isn't available, just continue
+        yield
+@pytest.fixture(scope="function", autouse=True)
 def reset_redaction_registry():
     """Reset the redaction registry before and after each test."""
     try:
@@ -197,6 +214,26 @@ def reset_redaction_registry():
         yield
         # Reset after test
         RedactionRegistry._instance = None
+    except ImportError:
+        # If the module isn't available, just continue
+        yield
+
+@pytest.fixture(scope="function", autouse=True)
+def apply_redaction_filter():
+    """Apply a RedactionFilter to the root logger for all tests."""
+    try:
+        # Import here to avoid circular imports
+        from openjd.sessions._redaction import RedactionFilter
+        from openjd.sessions._logging import LOG
+        
+        # Create and add the filter
+        redaction_filter = RedactionFilter()
+        LOG.addFilter(redaction_filter)
+        
+        yield
+        
+        # Remove the filter after the test
+        LOG.removeFilter(redaction_filter)
     except ImportError:
         # If the module isn't available, just continue
         yield

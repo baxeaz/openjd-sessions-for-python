@@ -21,8 +21,14 @@ class TestRedactedEnvEdgeCases:
         logger.setLevel(logging.INFO)
         logger.addHandler(handler)
         logger.addFilter(filter_obj)
-        return logger
         
+        # Add the redaction filter to ensure redaction works in tests
+        from openjd.sessions._redaction import RedactionFilter
+        redaction_filter = RedactionFilter()
+        logger.addFilter(redaction_filter)
+        
+        return logger
+
     @pytest.fixture(autouse=True)
     def reset_redaction_registry(self):
         """Reset the redaction registry before each test."""
@@ -71,7 +77,7 @@ class TestRedactedEnvEdgeCases:
         # Check that the message in the log is redacted
         assert message_queue.qsize() == 1
         log_message = message_queue.get(block=False).getMessage()
-        # With our new implementation, the redaction happens in the LoggerAdapter
+        assert "openjd_redacted_env: KEY=********" in log_message
         assert " VALUE" not in log_message
 
         # Check that subsequent logs with the value are redacted
@@ -79,9 +85,8 @@ class TestRedactedEnvEdgeCases:
         loga.info("The value is: VALUE")
         assert message_queue.qsize() == 1
         log_message = message_queue.get(block=False).getMessage()
-        # In our implementation, "VALUE" is also redacted because it's part of " VALUE"
-        assert "The value is:********" in log_message
-        
+        assert "The value is:********" in log_message  # The entire " VALUE" is redacted
+
         # Try with quotes around VALUE - this should not be redacted since it doesn't match " VALUE" exactly
         loga.info("The value is: 'VALUE'")
         assert message_queue.qsize() == 1
@@ -122,14 +127,13 @@ class TestRedactedEnvEdgeCases:
         # Check that the message in the log is redacted
         assert message_queue.qsize() == 1
         log_message = message_queue.get(block=False).getMessage()
-        # With our new implementation, the redaction happens in the LoggerAdapter
+        assert "openjd_redacted_env: KEY =********" in log_message
         assert "VALUE" not in log_message
 
         # Check that subsequent logs with the value are redacted
         loga.info("The value is: VALUE")
         assert message_queue.qsize() == 1
         log_message = message_queue.get(block=False).getMessage()
-        # In our implementation, "VALUE" is also redacted
         assert "The value is: ********" in log_message
 
     def test_redacted_env_without_equals(
@@ -160,7 +164,7 @@ class TestRedactedEnvEdgeCases:
         # Check that the message in the log is redacted
         assert message_queue.qsize() == 1
         log_message = message_queue.get(block=False).getMessage()
-        # With our new implementation, the redaction happens in the LoggerAdapter
+        assert "openjd_redacted_env: ********" in log_message
         assert "KEYVALUE" not in log_message
 
         # Check that subsequent logs with the value are redacted
@@ -198,7 +202,7 @@ class TestRedactedEnvEdgeCases:
         # Check that the message in the log is redacted
         assert message_queue.qsize() == 1
         log_message = message_queue.get(block=False).getMessage()
-        # With our new implementation, the redaction happens in the LoggerAdapter
+        assert "openjd_redacted_env: KEY=********" in log_message
         assert "VALUE=MORE" not in log_message
 
         # Check that subsequent logs with the value are redacted
@@ -505,3 +509,44 @@ class TestRedactedEnvEdgeCases:
             assert (
                 len(filtered_redacted_calls) == 0
             ), f"Case '{case}': openjd_redacted_env should not set environment variable"
+    def test_redaction_with_shared_substring(
+        self, message_queue: SimpleQueue, queue_handler: QueueHandler
+    ) -> None:
+        """Test that values with shared substrings are properly redacted.
+        For example, if we have 'secret123' and 'mysecret123', both should be fully redacted."""
+        # GIVEN
+        h = sha256()
+        h.update(b"redaction_shared_substring")
+        logger_name = "redacted_shared_substring" + h.hexdigest()[0:32]
+        callback_mock = MagicMock()
+        filter = ActionMonitoringFilter(
+            session_id="foo", callback=callback_mock, enabled_extensions=["REDACTED_ENV_VARS"]
+        )
+        log = self.build_logger(logger_name, queue_handler, filter)
+        loga = LoggerAdapter(log, extra={"session_id": "foo"})
+
+        # Set up redactions with shared substring and a unique string
+        loga.info("openjd_redacted_env: PASSWORD=secret123")
+        loga.info("openjd_redacted_env: PASSWORD2=mysecret123")
+        loga.info("openjd_redacted_env: PASSWORD3=uniquevalue456")
+
+        # Print the redaction registry for debugging
+        from openjd.sessions._redaction import RedactionRegistry
+        registry = RedactionRegistry.get_instance()
+        print(f"DEBUG - Redaction values: {registry._redacted_values}")
+
+        # Clear the queue of the setup messages
+        while not message_queue.empty():
+            message_queue.get()
+
+        # Log a message containing all values
+        loga.info("Values in log: secret123 mysecret123 uniquevalue456")
+
+        # All values should be completely redacted
+        assert message_queue.qsize() == 1
+        log_message = message_queue.get(block=False).getMessage()
+        print(f"DEBUG - Redacted message: {log_message}")
+        assert "secret123" not in log_message
+        assert "mysecret123" not in log_message
+        assert "uniquevalue456" not in log_message
+        assert "Values in log: ******** ******** ********" in log_message

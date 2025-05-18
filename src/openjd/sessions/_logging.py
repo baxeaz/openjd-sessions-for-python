@@ -44,7 +44,6 @@ class LogExtraInfo(TypedDict):
 class LoggerAdapter(logging.LoggerAdapter):
     """
     LoggerAdapter which merges the "extra" kwarg instead of replacing with what the LoggerAdapter was initialized with.
-    Also applies redactions to log messages.
     """
 
     def process(
@@ -53,18 +52,12 @@ class LoggerAdapter(logging.LoggerAdapter):
         """
         Typically the LoggerAdaptor simply replaces the `extra` key in the kwargs with the one initialized with the
         adapter. However, we want to merge the two dictionaries, so we override it here.
-        
-        Additionally, apply redactions to the message if it's a string.
         """
         if "extra" not in kwargs:
             kwargs["extra"] = self.extra
         else:
             kwargs["extra"] |= self.extra
-            
-        # Apply redactions to the message if it's a string
-        if isinstance(msg, str):
-            msg = RedactionRegistry.get_instance().redact_message(msg)
-            
+
         return msg, kwargs
 
 

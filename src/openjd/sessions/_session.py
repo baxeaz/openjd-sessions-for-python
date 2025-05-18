@@ -400,6 +400,12 @@ class Session(object):
             enabled_extensions=self._enabled_extensions,
         )
         LOG.addFilter(self._log_filter)
+        
+        # Add a redaction filter to ensure all log messages are redacted
+        from ._redaction import RedactionFilter
+        self._redaction_filter = RedactionFilter()
+        LOG.addFilter(self._redaction_filter)
+        
         self._logger = LoggerAdapter(LOG, extra={"session_id": self._session_id})
 
         host_info_extra = LogExtraInfo(openjd_log_content=LogContent.HOST_INFO)

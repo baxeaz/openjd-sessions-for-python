@@ -36,6 +36,12 @@ class TestActionMonitoringFilter:
         log.setLevel(logging.INFO)
         log.addHandler(handler)
         log.addFilter(filter)
+        
+        # Add the redaction filter to ensure redaction works in tests
+        from openjd.sessions._redaction import RedactionFilter
+        redaction_filter = RedactionFilter()
+        log.addFilter(redaction_filter)
+        
         return log
 
     @pytest.mark.parametrize(

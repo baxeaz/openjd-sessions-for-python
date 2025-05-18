@@ -38,4 +38,3 @@ __all__ = (
     "BadCredentialsException",
     "version",
 )
-from ._redaction import RedactionRegistry
