@@ -19,6 +19,9 @@ from openjd.model.v2023_09 import (
 from openjd.model.v2023_09 import (
     EmbeddedFileTypes as EmbeddedFileTypes_2023_09,
 )
+from openjd.model.v2023_09 import (
+    ModelParsingContext as ModelParsingContext_v2023_09,
+)
 from openjd.sessions._embedded_files import EmbeddedFiles, EmbeddedFilesScope
 from openjd.sessions._session_user import PosixSessionUser, WindowsSessionUser
 
@@ -67,7 +70,7 @@ class TestEmbeddedFiles:
                 name="Foo",
                 type=EmbeddedFileTypes_2023_09.TEXT,
                 filename=filename,
-                data=DataString_2023_09("some data"),
+                data=DataString_2023_09("some data", context=ModelParsingContext_v2023_09()),
             )
 
             # WHEN
@@ -106,7 +109,7 @@ class TestEmbeddedFiles:
             test_file = EmbeddedFileText_2023_09(
                 name="Foo",
                 type=EmbeddedFileTypes_2023_09.TEXT,
-                data=DataString_2023_09("some data"),
+                data=DataString_2023_09("some data", context=ModelParsingContext_v2023_09()),
             )
 
             # WHEN
@@ -135,7 +138,7 @@ class TestEmbeddedFiles:
             test_file = EmbeddedFileText_2023_09(
                 name="Foo",
                 type=EmbeddedFileTypes_2023_09.TEXT,
-                data=DataString_2023_09(testdata),
+                data=DataString_2023_09(testdata, context=ModelParsingContext_v2023_09()),
             )
             filename = tmp_path / uuid.uuid4().hex
             symtab = SymbolTable()
@@ -167,7 +170,7 @@ class TestEmbeddedFiles:
             test_file = EmbeddedFileText_2023_09(
                 name="Foo",
                 type=EmbeddedFileTypes_2023_09.TEXT,
-                data=DataString_2023_09(testdata),
+                data=DataString_2023_09(testdata, context=ModelParsingContext_v2023_09()),
             )
             filename = tmp_path / uuid.uuid4().hex
             symtab = SymbolTable()
@@ -193,7 +196,7 @@ class TestEmbeddedFiles:
             test_file = EmbeddedFileText_2023_09(
                 name="Foo",
                 type=EmbeddedFileTypes_2023_09.TEXT,
-                data=DataString_2023_09(testdata),
+                data=DataString_2023_09(testdata, context=ModelParsingContext_v2023_09()),
                 runnable=True,
             )
             filename = tmp_path / uuid.uuid4().hex
@@ -227,7 +230,7 @@ class TestEmbeddedFiles:
             test_file = EmbeddedFileText_2023_09(
                 name="Foo",
                 type=EmbeddedFileTypes_2023_09.TEXT,
-                data=DataString_2023_09(testdata),
+                data=DataString_2023_09(testdata, context=ModelParsingContext_v2023_09()),
             )
             filename = tmp_path / uuid.uuid4().hex
             testdataresult = "some data"
@@ -261,7 +264,7 @@ class TestEmbeddedFiles:
             test_file = EmbeddedFileText_2023_09(
                 name="Foo",
                 type=EmbeddedFileTypes_2023_09.TEXT,
-                data=DataString_2023_09(testdata),
+                data=DataString_2023_09(testdata, context=ModelParsingContext_v2023_09()),
             )
             filename = tmp_path / uuid.uuid4().hex
             symtab = SymbolTable()
@@ -305,7 +308,7 @@ class TestEmbeddedFiles:
             test_file = EmbeddedFileText_2023_09(
                 name="Foo",
                 type=EmbeddedFileTypes_2023_09.TEXT,
-                data=DataString_2023_09(testdata),
+                data=DataString_2023_09(testdata, context=ModelParsingContext_v2023_09()),
                 runnable=True,
             )
             filename = tmp_path / uuid.uuid4().hex
@@ -348,7 +351,7 @@ class TestEmbeddedFiles:
             test_file = EmbeddedFileText_2023_09(
                 name="Foo",
                 type=EmbeddedFileTypes_2023_09.TEXT,
-                data=DataString_2023_09(testdata),
+                data=DataString_2023_09(testdata, context=ModelParsingContext_v2023_09()),
             )
             filename = tmp_path / uuid.uuid4().hex
             symtab = SymbolTable()
@@ -403,7 +406,7 @@ class TestEmbeddedFiles:
                 EmbeddedFileText_2023_09(
                     name=f.name,
                     type=EmbeddedFileTypes_2023_09.TEXT,
-                    data=DataString_2023_09(f.data),
+                    data=DataString_2023_09(f.data, context=ModelParsingContext_v2023_09()),
                     runnable=f.runnable,
                 )
                 for f in test_data
@@ -480,7 +483,7 @@ class TestEmbeddedFiles:
                 EmbeddedFileText_2023_09(
                     name=f.name,
                     type=EmbeddedFileTypes_2023_09.TEXT,
-                    data=DataString_2023_09(f.data),
+                    data=DataString_2023_09(f.data, context=ModelParsingContext_v2023_09()),
                     runnable=f.runnable,
                 )
                 for f in test_data
@@ -564,7 +567,7 @@ class TestEmbeddedFiles:
                 EmbeddedFileText_2023_09(
                     name=f.name,
                     type=EmbeddedFileTypes_2023_09.TEXT,
-                    data=DataString_2023_09(f.data),
+                    data=DataString_2023_09(f.data, context=ModelParsingContext_v2023_09()),
                     runnable=f.runnable,
                 )
                 for f in test_data
@@ -641,7 +644,9 @@ class TestEmbeddedFiles:
                 EmbeddedFileText_2023_09(
                     name=f.name,
                     type=EmbeddedFileTypes_2023_09.TEXT,
-                    data=DataString_2023_09(given_file_data),
+                    data=DataString_2023_09(
+                        given_file_data, context=ModelParsingContext_v2023_09()
+                    ),
                     filename=f.filename,
                 )
                 for f in test_data

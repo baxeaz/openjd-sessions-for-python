@@ -14,6 +14,12 @@ import pytest
 
 from openjd.model import SymbolTable
 from openjd.model.v2023_09 import Action as Action_2023_09
+from openjd.model.v2023_09 import ArgString
+from openjd.model.v2023_09 import CommandString
+from openjd.model.v2023_09 import DataString
+from openjd.model.v2023_09 import (
+    ModelParsingContext as ModelParsingContext_v2023_09,
+)
 from openjd.model.v2023_09 import (
     CancelationMethodNotifyThenTerminate as CancelationMethodNotifyThenTerminate_2023_09,
 )
@@ -64,7 +70,13 @@ class TestStepScriptRunner:
         script = StepScript_2023_09(
             actions=StepActions_2023_09(
                 onRun=Action_2023_09(
-                    command="{{ Task.Command }}", args=["-c", "print('\"Hello\"')"]
+                    command=CommandString(
+                        "{{ Task.Command }}", context=ModelParsingContext_v2023_09()
+                    ),
+                    args=[
+                        ArgString("-c", context=ModelParsingContext_v2023_09()),
+                        ArgString("print('\"Hello\"')", context=ModelParsingContext_v2023_09()),
+                    ],
                 )
             )
         )
@@ -99,11 +111,18 @@ class TestStepScriptRunner:
         # GIVEN
         script = StepScript_2023_09(
             actions=StepActions_2023_09(
-                onRun=Action_2023_09(command="{{ Task.Command }}", args=["{{ Task.File.Foo }}"])
+                onRun=Action_2023_09(
+                    command=CommandString(
+                        "{{ Task.Command }}", context=ModelParsingContext_v2023_09()
+                    ),
+                    args=[ArgString("{{ Task.File.Foo }}", context=ModelParsingContext_v2023_09())],
+                )
             ),
             embeddedFiles=[
                 EmbeddedFileText_2023_09(
-                    name="Foo", type=EmbeddedFileTypes_2023_09.TEXT, data="print('Hello')"
+                    name="Foo",
+                    type=EmbeddedFileTypes_2023_09.TEXT,
+                    data=DataString("print('Hello')", context=ModelParsingContext_v2023_09()),
                 )
             ],
         )
@@ -149,26 +168,36 @@ class TestStepScriptRunner:
         # GIVEN
         if is_posix():
             script = StepScript_2023_09(
-                actions=StepActions_2023_09(onRun=Action_2023_09(command="./test.sh")),
+                actions=StepActions_2023_09(
+                    onRun=Action_2023_09(
+                        command=CommandString("./test.sh", context=ModelParsingContext_v2023_09())
+                    )
+                ),
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Foo",
                         type=EmbeddedFileTypes_2023_09.TEXT,
                         filename="test.sh",
                         runnable=True,
-                        data="#!/bin/sh\necho 'Hello!'",
+                        data=DataString(
+                            "#!/bin/sh\necho 'Hello!'", context=ModelParsingContext_v2023_09()
+                        ),
                     )
                 ],
             )
         else:
             script = StepScript_2023_09(
-                actions=StepActions_2023_09(onRun=Action_2023_09(command="test.bat")),
+                actions=StepActions_2023_09(
+                    onRun=Action_2023_09(
+                        command=CommandString("test.bat", context=ModelParsingContext_v2023_09())
+                    )
+                ),
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Foo",
                         type=EmbeddedFileTypes_2023_09.TEXT,
                         filename="test.bat",
-                        data="echo Hello!",
+                        data=DataString("echo Hello!", context=ModelParsingContext_v2023_09()),
                     )
                 ],
             )
@@ -241,8 +270,13 @@ class TestStepScriptRunner:
                 script = StepScript_2023_09(
                     actions=StepActions_2023_09(
                         onRun=Action_2023_09(
-                            command="{{ Task.Command }}",
-                            args=["-c", "print('Hello')"],
+                            command=CommandString(
+                                "{{ Task.Command }}", context=ModelParsingContext_v2023_09()
+                            ),
+                            args=[
+                                ArgString("-c", context=ModelParsingContext_v2023_09()),
+                                ArgString("print('Hello')", context=ModelParsingContext_v2023_09()),
+                            ],
                             cancelation=cancel_method,
                         )
                     )

@@ -17,6 +17,9 @@ import pytest
 
 from openjd.model import ParameterValue, ParameterValueType, SpecificationRevision, SymbolTable
 from openjd.model.v2023_09 import Action as Action_2023_09
+from openjd.model.v2023_09 import ArgString
+from openjd.model.v2023_09 import CommandString
+from openjd.model.v2023_09 import DataString
 from openjd.model.v2023_09 import (
     EmbeddedFileText as EmbeddedFileText_2023_09,
 )
@@ -24,11 +27,15 @@ from openjd.model.v2023_09 import (
     EmbeddedFileTypes as EmbeddedFileTypes_2023_09,
 )
 from openjd.model.v2023_09 import Environment as Environment_2023_09
+from openjd.model.v2023_09 import EnvironmentVariableValueString
 from openjd.model.v2023_09 import (
     EnvironmentActions as EnvironmentActions_2023_09,
 )
 from openjd.model.v2023_09 import (
     EnvironmentScript as EnvironmentScript_2023_09,
+)
+from openjd.model.v2023_09 import (
+    ModelParsingContext as ModelParsingContext_v2023_09,
 )
 from openjd.model.v2023_09 import StepActions as StepActions_2023_09
 from openjd.model.v2023_09 import StepScript as StepScript_2023_09
@@ -659,13 +666,19 @@ class TestSessionRunTask_2023_09:  # noqa: N801
     def fix_basic_task_script() -> StepScript_2023_09:
         return StepScript_2023_09(
             actions=StepActions_2023_09(
-                onRun=Action_2023_09(command=sys.executable, args=["{{ Task.File.Foo }}"])
+                onRun=Action_2023_09(
+                    command=CommandString(sys.executable, context=ModelParsingContext_v2023_09()),
+                    args=[ArgString("{{ Task.File.Foo }}", context=ModelParsingContext_v2023_09())],
+                )
             ),
             embeddedFiles=[
                 EmbeddedFileText_2023_09(
                     name="Foo",
                     type=EmbeddedFileTypes_2023_09.TEXT,
-                    data="import time; time.sleep(0.5); print('{{ Task.Param.P }} {{ Task.RawParam.P }}'); print('{{ Param.J }} {{ RawParam.J }}')",
+                    data=DataString(
+                        "import time; time.sleep(0.5); print('{{ Task.Param.P }} {{ Task.RawParam.P }}'); print('{{ Param.J }} {{ RawParam.J }}')",
+                        context=ModelParsingContext_v2023_09(),
+                    ),
                 )
             ],
         )
@@ -673,7 +686,17 @@ class TestSessionRunTask_2023_09:  # noqa: N801
     @staticmethod
     @pytest.fixture
     def fix_foo_baz_environment() -> Environment_2023_09:
-        return Environment_2023_09(name="FooBazEnvironment", variables={"FOO": "bar", "BAZ": "qux"})
+        return Environment_2023_09(
+            name="FooBazEnvironment",
+            variables={
+                "FOO": EnvironmentVariableValueString(
+                    "bar", context=ModelParsingContext_v2023_09()
+                ),
+                "BAZ": EnvironmentVariableValueString(
+                    "qux", context=ModelParsingContext_v2023_09()
+                ),
+            },
+        )
 
     def test_run_task(
         self, caplog: pytest.LogCaptureFixture, fix_basic_task_script: StepScript_2023_09
@@ -723,13 +746,19 @@ class TestSessionRunTask_2023_09:  # noqa: N801
         # GIVEN
         step_script = StepScript_2023_09(
             actions=StepActions_2023_09(
-                onRun=Action_2023_09(command=sys.executable, args=["{{ Task.File.Foo }}"])
+                onRun=Action_2023_09(
+                    command=CommandString(sys.executable, context=ModelParsingContext_v2023_09()),
+                    args=[ArgString("{{ Task.File.Foo }}", context=ModelParsingContext_v2023_09())],
+                )
             ),
             embeddedFiles=[
                 EmbeddedFileText_2023_09(
                     name="Foo",
                     type=EmbeddedFileTypes_2023_09.TEXT,
-                    data='import time; import os; time.sleep(0.5); print(f\'{os.environ["SESSION_VAR"]} {os.environ["ACTION_VAR"]}\')',
+                    data=DataString(
+                        'import time; import os; time.sleep(0.5); print(f\'{os.environ["SESSION_VAR"]} {os.environ["ACTION_VAR"]}\')',
+                        context=ModelParsingContext_v2023_09(),
+                    ),
                 )
             ],
         )
@@ -775,7 +804,13 @@ class TestSessionRunTask_2023_09:  # noqa: N801
         # This ensures that we are correctly constructing the symbol table for the run.
         script = StepScript_2023_09(
             actions=StepActions_2023_09(
-                onRun=Action_2023_09(command=sys.executable, args=["-c", "print('hi')"])
+                onRun=Action_2023_09(
+                    command=CommandString(sys.executable, context=ModelParsingContext_v2023_09()),
+                    args=[
+                        ArgString("-c", context=ModelParsingContext_v2023_09()),
+                        ArgString("print('hi')", context=ModelParsingContext_v2023_09()),
+                    ],
+                )
             ),
         )
         session_id = uuid.uuid4().hex
@@ -799,13 +834,19 @@ class TestSessionRunTask_2023_09:  # noqa: N801
         task_params = dict[str, ParameterValue]()
         step_script = StepScript_2023_09(
             actions=StepActions_2023_09(
-                onRun=Action_2023_09(command=sys.executable, args=["{{ Task.File.Foo }}"])
+                onRun=Action_2023_09(
+                    command=CommandString(sys.executable, context=ModelParsingContext_v2023_09()),
+                    args=[ArgString("{{ Task.File.Foo }}", context=ModelParsingContext_v2023_09())],
+                )
             ),
             embeddedFiles=[
                 EmbeddedFileText_2023_09(
                     name="Foo",
                     type=EmbeddedFileTypes_2023_09.TEXT,
-                    data="import time; time.sleep(0.5); print('{{ Task.Param.P }}'); print('{{ Param.J }}')",
+                    data=DataString(
+                        "import time; time.sleep(0.5); print('{{ Task.Param.P }}'); print('{{ Param.J }}')",
+                        context=ModelParsingContext_v2023_09(),
+                    ),
                 )
             ],
         )
@@ -826,13 +867,18 @@ class TestSessionRunTask_2023_09:  # noqa: N801
         # GIVEN
         script = StepScript_2023_09(
             actions=StepActions_2023_09(
-                onRun=Action_2023_09(command=sys.executable, args=["{{ Task.File.Foo }}"])
+                onRun=Action_2023_09(
+                    command=CommandString(sys.executable, context=ModelParsingContext_v2023_09()),
+                    args=[ArgString("{{ Task.File.Foo }}", context=ModelParsingContext_v2023_09())],
+                )
             ),
             embeddedFiles=[
                 EmbeddedFileText_2023_09(
                     name="Foo",
                     type=EmbeddedFileTypes_2023_09.TEXT,
-                    data="import sys; sys.exit(1)",
+                    data=DataString(
+                        "import sys; sys.exit(1)", context=ModelParsingContext_v2023_09()
+                    ),
                 )
             ],
         )
@@ -900,13 +946,19 @@ class TestSessionCancel:
         # GIVEN
         script = StepScript_2023_09(
             actions=StepActions_2023_09(
-                onRun=Action_2023_09(command=sys.executable, args=["{{ Task.File.Foo }}"])
+                onRun=Action_2023_09(
+                    command=CommandString(sys.executable, context=ModelParsingContext_v2023_09()),
+                    args=[ArgString("{{ Task.File.Foo }}", context=ModelParsingContext_v2023_09())],
+                )
             ),
             embeddedFiles=[
                 EmbeddedFileText_2023_09(
                     name="Foo",
                     type=EmbeddedFileTypes_2023_09.TEXT,
-                    data="import time; print('Starting'); time.sleep(10); print('End')",
+                    data=DataString(
+                        "import time; print('Starting'); time.sleep(10); print('End')",
+                        context=ModelParsingContext_v2023_09(),
+                    ),
                 )
             ],
         )
@@ -959,13 +1011,18 @@ class TestSessionCancel:
         start_time = time.monotonic()
         script = StepScript_2023_09(
             actions=StepActions_2023_09(
-                onRun=Action_2023_09(command=sys.executable, args=["{{ Task.File.Foo }}"])
+                onRun=Action_2023_09(
+                    command=CommandString(sys.executable, context=ModelParsingContext_v2023_09()),
+                    args=[ArgString("{{ Task.File.Foo }}", context=ModelParsingContext_v2023_09())],
+                )
             ),
             embeddedFiles=[
                 EmbeddedFileText_2023_09(
                     name="Foo",
                     type=EmbeddedFileTypes_2023_09.TEXT,
-                    data="import time; time.sleep(10)",
+                    data=DataString(
+                        "import time; time.sleep(10)", context=ModelParsingContext_v2023_09()
+                    ),
                 )
             ],
         )
@@ -1009,12 +1066,26 @@ def _make_environment(
         EnvironmentScript_2023_09(
             actions=EnvironmentActions_2023_09(
                 onEnter=(
-                    Action_2023_09(command=sys.executable, args=["{{ Env.File.Foo }}"])
+                    Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("{{ Env.File.Foo }}", context=ModelParsingContext_v2023_09())
+                        ],
+                    )
                     if enter_script
                     else None
                 ),
                 onExit=(
-                    Action_2023_09(command=sys.executable, args=["{{ Env.File.Foo }}"])
+                    Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("{{ Env.File.Foo }}", context=ModelParsingContext_v2023_09())
+                        ],
+                    )
                     if exit_script
                     else None
                 ),
@@ -1023,7 +1094,10 @@ def _make_environment(
                 EmbeddedFileText_2023_09(
                     name="Foo",
                     type=EmbeddedFileTypes_2023_09.TEXT,
-                    data="import time; time.sleep(0.5); print('{{ Param.J }}')",
+                    data=DataString(
+                        "import time; time.sleep(0.5); print('{{ Param.J }}')",
+                        context=ModelParsingContext_v2023_09(),
+                    ),
                 )
             ],
         )
@@ -1032,7 +1106,12 @@ def _make_environment(
     )
 
     return Environment_2023_09(
-        name=name if name is not None else "SomeEnv", variables=variables, script=script
+        name=name if name is not None else "SomeEnv",
+        variables={
+            k: EnvironmentVariableValueString(v, context=ModelParsingContext_v2023_09())
+            for k, v in (variables or {}).items()
+        },
+        script=script,
     )
 
 
@@ -1047,13 +1126,23 @@ class TestSessionEnterEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onEnter=Action_2023_09(command=sys.executable, args=["{{ Env.File.Foo }}"])
+                    onEnter=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("{{ Env.File.Foo }}", context=ModelParsingContext_v2023_09())
+                        ],
+                    )
                 ),
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Foo",
                         type=EmbeddedFileTypes_2023_09.TEXT,
-                        data="import time; time.sleep(0.5); print('{{ Param.J }} {{ RawParam.J }}')",
+                        data=DataString(
+                            "import time; time.sleep(0.5); print('{{ Param.J }} {{ RawParam.J }}')",
+                            context=ModelParsingContext_v2023_09(),
+                        ),
                     )
                 ],
             )
@@ -1084,13 +1173,23 @@ class TestSessionEnterEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onEnter=Action_2023_09(command=sys.executable, args=["{{ Env.File.Foo }}"])
+                    onEnter=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("{{ Env.File.Foo }}", context=ModelParsingContext_v2023_09())
+                        ],
+                    )
                 ),
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Foo",
                         type=EmbeddedFileTypes_2023_09.TEXT,
-                        data='import time; import os; time.sleep(0.5); print(f\'{os.environ["SESSION_VAR"]} {os.environ["ACTION_VAR"]}\')',
+                        data=DataString(
+                            'import time; import os; time.sleep(0.5); print(f\'{os.environ["SESSION_VAR"]} {os.environ["ACTION_VAR"]}\')',
+                            context=ModelParsingContext_v2023_09(),
+                        ),
                     )
                 ],
             )
@@ -1137,7 +1236,15 @@ class TestSessionEnterEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onEnter=Action_2023_09(command=sys.executable, args=["-c", "print('hi')"])
+                    onEnter=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString("print('hi')", context=ModelParsingContext_v2023_09()),
+                        ],
+                    )
                 ),
             )
         )
@@ -1161,7 +1268,13 @@ class TestSessionEnterEnvironment_2023_09:  # noqa: N801
         # This ensures that we are correctly constructing the symbol table for the run.
         script = EnvironmentScript_2023_09(
             actions=EnvironmentActions_2023_09(
-                onEnter=Action_2023_09(command=sys.executable, args=["-c", "print('hi')"])
+                onEnter=Action_2023_09(
+                    command=CommandString(sys.executable, context=ModelParsingContext_v2023_09()),
+                    args=[
+                        ArgString("-c", context=ModelParsingContext_v2023_09()),
+                        ArgString("print('hi')", context=ModelParsingContext_v2023_09()),
+                    ],
+                )
             ),
         )
         environment1 = _environment_from_script(script)
@@ -1192,7 +1305,15 @@ class TestSessionEnterEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onEnter=Action_2023_09(command=sys.executable, args=["-c", "print('hi')"])
+                    onEnter=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString("print('hi')", context=ModelParsingContext_v2023_09()),
+                        ],
+                    )
                 ),
             )
         )
@@ -1217,13 +1338,23 @@ class TestSessionEnterEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onEnter=Action_2023_09(command=sys.executable, args=["{{ Env.File.Foo }}"])
+                    onEnter=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("{{ Env.File.Foo }}", context=ModelParsingContext_v2023_09())
+                        ],
+                    )
                 ),
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Foo",
                         type=EmbeddedFileTypes_2023_09.TEXT,
-                        data="import time; time.sleep(0.5); print('{{ Task.Param.P }}'); print('{{ Param.J }}')",
+                        data=DataString(
+                            "import time; time.sleep(0.5); print('{{ Task.Param.P }}'); print('{{ Param.J }}')",
+                            context=ModelParsingContext_v2023_09(),
+                        ),
                     )
                 ],
             )
@@ -1248,13 +1379,22 @@ class TestSessionEnterEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onEnter=Action_2023_09(command=sys.executable, args=["{{ Env.File.Foo }}"])
+                    onEnter=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("{{ Env.File.Foo }}", context=ModelParsingContext_v2023_09())
+                        ],
+                    )
                 ),
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Foo",
                         type=EmbeddedFileTypes_2023_09.TEXT,
-                        data="import sys; sys.exit(1)",
+                        data=DataString(
+                            "import sys; sys.exit(1)", context=ModelParsingContext_v2023_09()
+                        ),
                     )
                 ],
             )
@@ -1280,7 +1420,15 @@ class TestSessionEnterEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onExit=Action_2023_09(command=sys.executable, args=["-c", "print('hi')"])
+                    onExit=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString("print('hi')", context=ModelParsingContext_v2023_09()),
+                        ],
+                    )
                 ),
             )
         )
@@ -1321,19 +1469,31 @@ class TestSessionEnterEnvironment_2023_09:  # noqa: N801
         session_id = uuid.uuid4().hex
         job_params = {"J": ParameterValue(type=ParameterValueType.STRING, value="Jvalue")}
         variables = {
-            "FOO": "{{Param.J}}",
+            "FOO": EnvironmentVariableValueString(
+                "{{Param.J}}", context=ModelParsingContext_v2023_09()
+            ),
         }
         environment = Environment_2023_09(
             name="DefinitelyNotAFakeEnvironment",
             script=EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onEnter=Action_2023_09(command=sys.executable, args=["{{ Env.File.Foo }}"])
+                    onEnter=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("{{ Env.File.Foo }}", context=ModelParsingContext_v2023_09())
+                        ],
+                    )
                 ),
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Foo",
                         type=EmbeddedFileTypes_2023_09.TEXT,
-                        data="import time; import os; time.sleep(0.5); print(os.environ['FOO'])",
+                        data=DataString(
+                            "import time; import os; time.sleep(0.5); print(os.environ['FOO'])",
+                            context=ModelParsingContext_v2023_09(),
+                        ),
                     )
                 ],
             ),
@@ -1386,13 +1546,23 @@ class TestSessionExitEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onExit=Action_2023_09(command=sys.executable, args=["{{ Env.File.Foo }}"])
+                    onExit=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("{{ Env.File.Foo }}", context=ModelParsingContext_v2023_09())
+                        ],
+                    )
                 ),
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Foo",
                         type=EmbeddedFileTypes_2023_09.TEXT,
-                        data="import time; time.sleep(0.5); print('{{ Param.J }} {{ RawParam.J }}')",
+                        data=DataString(
+                            "import time; time.sleep(0.5); print('{{ Param.J }} {{ RawParam.J }}')",
+                            context=ModelParsingContext_v2023_09(),
+                        ),
                     )
                 ],
             )
@@ -1425,13 +1595,23 @@ class TestSessionExitEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onExit=Action_2023_09(command=sys.executable, args=["{{ Env.File.Foo }}"])
+                    onExit=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("{{ Env.File.Foo }}", context=ModelParsingContext_v2023_09())
+                        ],
+                    )
                 ),
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Foo",
                         type=EmbeddedFileTypes_2023_09.TEXT,
-                        data='import time; import os; time.sleep(0.5); print(f\'{os.environ["SESSION_VAR"]} {os.environ["ACTION_VAR"]}\')',
+                        data=DataString(
+                            'import time; import os; time.sleep(0.5); print(f\'{os.environ["SESSION_VAR"]} {os.environ["ACTION_VAR"]}\')',
+                            context=ModelParsingContext_v2023_09(),
+                        ),
                     )
                 ],
             )
@@ -1476,7 +1656,15 @@ class TestSessionExitEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onExit=Action_2023_09(command=sys.executable, args=["-c", "print('hi')"])
+                    onExit=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString("print('hi')", context=ModelParsingContext_v2023_09()),
+                        ],
+                    )
                 ),
             )
         )
@@ -1501,7 +1689,15 @@ class TestSessionExitEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onExit=Action_2023_09(command=sys.executable, args=["-c", "print('hi')"])
+                    onExit=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString("print('hi')", context=ModelParsingContext_v2023_09()),
+                        ],
+                    )
                 ),
             )
         )
@@ -1524,13 +1720,23 @@ class TestSessionExitEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onExit=Action_2023_09(command=sys.executable, args=["{{ Env.File.Foo }}"])
+                    onExit=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("{{ Env.File.Foo }}", context=ModelParsingContext_v2023_09())
+                        ],
+                    )
                 ),
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Foo",
                         type=EmbeddedFileTypes_2023_09.TEXT,
-                        data="import time; time.sleep(0.5); print('{{ Task.Param.P }}'); print('{{ Param.J }}')",
+                        data=DataString(
+                            "import time; time.sleep(0.5); print('{{ Task.Param.P }}'); print('{{ Param.J }}')",
+                            context=ModelParsingContext_v2023_09(),
+                        ),
                     )
                 ],
             )
@@ -1557,13 +1763,22 @@ class TestSessionExitEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onExit=Action_2023_09(command=sys.executable, args=["{{ Env.File.Foo }}"])
+                    onExit=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("{{ Env.File.Foo }}", context=ModelParsingContext_v2023_09())
+                        ],
+                    )
                 ),
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Foo",
                         type=EmbeddedFileTypes_2023_09.TEXT,
-                        data="import sys; sys.exit(1)",
+                        data=DataString(
+                            "import sys; sys.exit(1)", context=ModelParsingContext_v2023_09()
+                        ),
                     )
                 ],
             )
@@ -1591,7 +1806,15 @@ class TestSessionExitEnvironment_2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onEnter=Action_2023_09(command=sys.executable, args=["-c", "print('hi')"])
+                    onEnter=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString("print('hi')", context=ModelParsingContext_v2023_09()),
+                        ],
+                    )
                 ),
             )
         )
@@ -1687,13 +1910,18 @@ class TestSessionExitEnvironment_2023_09:  # noqa: N801
         environment = _make_environment(enter_script=False, exit_script=False, variables=variables)
         step_script = StepScript_2023_09(
             actions=StepActions_2023_09(
-                onRun=Action_2023_09(command=sys.executable, args=["{{ Task.File.Foo }}"])
+                onRun=Action_2023_09(
+                    command=CommandString(sys.executable, context=ModelParsingContext_v2023_09()),
+                    args=[ArgString("{{ Task.File.Foo }}", context=ModelParsingContext_v2023_09())],
+                )
             ),
             embeddedFiles=[
                 EmbeddedFileText_2023_09(
                     name="Foo",
                     type=EmbeddedFileTypes_2023_09.TEXT,
-                    data="print('Task running')",
+                    data=DataString(
+                        "print('Task running')", context=ModelParsingContext_v2023_09()
+                    ),
                 )
             ],
         )
@@ -1914,13 +2142,21 @@ class TestPathMapping_v2023_09:  # noqa: N801
         #  we know they're okay from test_materialize() above.
         script = StepScript_2023_09(
             actions=StepActions_2023_09(
-                onRun=Action_2023_09(command=sys.executable, args=["{{ Task.File.Script }}"])
+                onRun=Action_2023_09(
+                    command=CommandString(sys.executable, context=ModelParsingContext_v2023_09()),
+                    args=[
+                        ArgString("{{ Task.File.Script }}", context=ModelParsingContext_v2023_09())
+                    ],
+                )
             ),
             embeddedFiles=[
                 EmbeddedFileText_2023_09(
                     name="Script",
                     type=EmbeddedFileTypes_2023_09.TEXT,
-                    data="import os; print('Has: {{Session.HasPathMappingRules}}')",
+                    data=DataString(
+                        "import os; print('Has: {{Session.HasPathMappingRules}}')",
+                        context=ModelParsingContext_v2023_09(),
+                    ),
                 )
             ],
         )
@@ -1959,13 +2195,25 @@ class TestPathMapping_v2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onEnter=Action_2023_09(command=sys.executable, args=["{{ Env.File.Script }}"])
+                    onEnter=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString(
+                                "{{ Env.File.Script }}", context=ModelParsingContext_v2023_09()
+                            )
+                        ],
+                    )
                 ),
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Script",
                         type=EmbeddedFileTypes_2023_09.TEXT,
-                        data="import os; print('Has: {{Session.HasPathMappingRules}}')",
+                        data=DataString(
+                            "import os; print('Has: {{Session.HasPathMappingRules}}')",
+                            context=ModelParsingContext_v2023_09(),
+                        ),
                     )
                 ],
             )
@@ -2004,13 +2252,25 @@ class TestPathMapping_v2023_09:  # noqa: N801
         environment = _environment_from_script(
             EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
-                    onExit=Action_2023_09(command=sys.executable, args=["{{ Env.File.Script }}"])
+                    onExit=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString(
+                                "{{ Env.File.Script }}", context=ModelParsingContext_v2023_09()
+                            )
+                        ],
+                    )
                 ),
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Script",
                         type=EmbeddedFileTypes_2023_09.TEXT,
-                        data="import os; print('Has: {{Session.HasPathMappingRules}}')",
+                        data=DataString(
+                            "import os; print('Has: {{Session.HasPathMappingRules}}')",
+                            context=ModelParsingContext_v2023_09(),
+                        ),
                     )
                 ],
             )
@@ -2373,11 +2633,17 @@ class TestEnvironmentVariablesInTasks_2023_09:
                     name="Run",
                     type="TEXT",
                     runnable=True,
-                    data='import os; print(f\'FOO={os.environ.get("FOO", "FOO-not-set")}\'); print(f\'BAR={os.environ.get("BAR", "BAR-not-set")}\');',
+                    data=DataString(
+                        'import os; print(f\'FOO={os.environ.get("FOO", "FOO-not-set")}\'); print(f\'BAR={os.environ.get("BAR", "BAR-not-set")}\');',
+                        context=ModelParsingContext_v2023_09(),
+                    ),
                 )
             ],
             actions=StepActions_2023_09(
-                onRun=Action_2023_09(command=sys.executable, args=["{{ Task.File.Run }}"])
+                onRun=Action_2023_09(
+                    command=CommandString(sys.executable, context=ModelParsingContext_v2023_09()),
+                    args=[ArgString("{{ Task.File.Run }}", context=ModelParsingContext_v2023_09())],
+                )
             ),
         )
 
@@ -2390,7 +2656,15 @@ class TestEnvironmentVariablesInTasks_2023_09:
 
         # GIVEN
         environment = Environment_2023_09(
-            name="Env", variables={"FOO": "FOO-value", "BAR": "BAR-value"}
+            name="Env",
+            variables={
+                "FOO": EnvironmentVariableValueString(
+                    "FOO-value", context=ModelParsingContext_v2023_09()
+                ),
+                "BAR": EnvironmentVariableValueString(
+                    "BAR-value", context=ModelParsingContext_v2023_09()
+                ),
+            },
         )
         session_id = uuid.uuid4().hex
         job_params = dict[str, ParameterValue]()
@@ -2418,10 +2692,26 @@ class TestEnvironmentVariablesInTasks_2023_09:
 
         # GIVEN
         environment_outer = Environment_2023_09(
-            name="Env", variables={"FOO": "FOO-value", "BAR": "BAR-value"}
+            name="Env",
+            variables={
+                "FOO": EnvironmentVariableValueString(
+                    "FOO-value", context=ModelParsingContext_v2023_09()
+                ),
+                "BAR": EnvironmentVariableValueString(
+                    "BAR-value", context=ModelParsingContext_v2023_09()
+                ),
+            },
         )
         environment_inner = Environment_2023_09(
-            name="Env", variables={"FOO": "FOO-override", "BAR": "BAR-override"}
+            name="Env",
+            variables={
+                "FOO": EnvironmentVariableValueString(
+                    "FOO-override", context=ModelParsingContext_v2023_09()
+                ),
+                "BAR": EnvironmentVariableValueString(
+                    "BAR-override", context=ModelParsingContext_v2023_09()
+                ),
+            },
         )
         session_id = uuid.uuid4().hex
         job_params = dict[str, ParameterValue]()
@@ -2454,23 +2744,48 @@ class TestEnvironmentVariablesInTasks_2023_09:
         # GIVEN
         environment_outer = Environment_2023_09(
             name="Env",
-            variables={"FOO": "FOO-value", "BAR": "BAR-value"},
+            variables={
+                "FOO": EnvironmentVariableValueString(
+                    "FOO-value", context=ModelParsingContext_v2023_09()
+                ),
+                "BAR": EnvironmentVariableValueString(
+                    "BAR-value", context=ModelParsingContext_v2023_09()
+                ),
+            },
             script=EnvironmentScript_2023_09(
                 embeddedFiles=[
                     EmbeddedFileText_2023_09(
                         name="Run",
                         type="TEXT",
                         runnable=True,
-                        data="import os; print(f'FOO={os.environ.get(\"FOO\")}'); print(f'BAR={os.environ.get(\"BAR\")}');",
+                        data=DataString(
+                            "import os; print(f'FOO={os.environ.get(\"FOO\")}'); print(f'BAR={os.environ.get(\"BAR\")}');",
+                            context=ModelParsingContext_v2023_09(),
+                        ),
                     )
                 ],
                 actions=EnvironmentActions_2023_09(
-                    onExit=Action_2023_09(command=sys.executable, args=["{{ Env.File.Run }}"])
+                    onExit=Action_2023_09(
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("{{ Env.File.Run }}", context=ModelParsingContext_v2023_09())
+                        ],
+                    )
                 ),
             ),
         )
         environment_inner = Environment_2023_09(
-            name="Env", variables={"FOO": "FOO-override", "BAR": "BAR-override"}
+            name="Env",
+            variables={
+                "FOO": EnvironmentVariableValueString(
+                    "FOO-override", context=ModelParsingContext_v2023_09()
+                ),
+                "BAR": EnvironmentVariableValueString(
+                    "BAR-override", context=ModelParsingContext_v2023_09()
+                ),
+            },
         )
         session_id = uuid.uuid4().hex
         job_params = dict[str, ParameterValue]()
@@ -2503,11 +2818,24 @@ class TestEnvironmentVariablesInTasks_2023_09:
             script=EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
                     onEnter=Action_2023_09(
-                        command=sys.executable, args=["-c", "print('openjd_env: FOO=FOO-value')"]
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString(
+                                "print('openjd_env: FOO=FOO-value')",
+                                context=ModelParsingContext_v2023_09(),
+                            ),
+                        ],
                     )
                 )
             ),
-            variables={"BAR": "BAR-value"},
+            variables={
+                "BAR": EnvironmentVariableValueString(
+                    "BAR-value", context=ModelParsingContext_v2023_09()
+                )
+            },
         )
         session_id = uuid.uuid4().hex
         job_params = dict[str, ParameterValue]()
@@ -2541,8 +2869,16 @@ class TestEnvironmentVariablesInTasks_2023_09:
             script=EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
                     onEnter=Action_2023_09(
-                        command=sys.executable,
-                        args=["-c", "import json; print('openjd_env: \"FOO=12\\\\n34')"],
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString(
+                                "import json; print('openjd_env: \"FOO=12\\\\n34')",
+                                context=ModelParsingContext_v2023_09(),
+                            ),
+                        ],
                     )
                 )
             ),
@@ -2573,8 +2909,16 @@ class TestEnvironmentVariablesInTasks_2023_09:
             script=EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
                     onEnter=Action_2023_09(
-                        command=sys.executable,
-                        args=["-c", "print('openjd_env: \"FOO=12\\\\n34\"')"],
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString(
+                                "print('openjd_env: \"FOO=12\\\\n34\"')",
+                                context=ModelParsingContext_v2023_09(),
+                            ),
+                        ],
                     )
                 ),
             ),
@@ -2583,10 +2927,13 @@ class TestEnvironmentVariablesInTasks_2023_09:
         script = StepScript_2023_09(
             actions=StepActions_2023_09(
                 onRun=Action_2023_09(
-                    command=sys.executable,
+                    command=CommandString(sys.executable, context=ModelParsingContext_v2023_09()),
                     args=[
-                        "-c",
-                        "import os; print('FOO:'); print(f'{os.environ[\"FOO\"]}'); print('---')",
+                        ArgString("-c", context=ModelParsingContext_v2023_09()),
+                        ArgString(
+                            "import os; print('FOO:'); print(f'{os.environ[\"FOO\"]}'); print('---')",
+                            context=ModelParsingContext_v2023_09(),
+                        ),
                     ],
                 )
             ),
@@ -2624,11 +2971,27 @@ class TestEnvironmentVariablesInTasks_2023_09:
             script=EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
                     onEnter=Action_2023_09(
-                        command=sys.executable, args=["-c", "print('openjd_env: FOO=FOO-value')"]
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString(
+                                "print('openjd_env: FOO=FOO-value')",
+                                context=ModelParsingContext_v2023_09(),
+                            ),
+                        ],
                     )
                 )
             ),
-            variables={"BAR": "BAR-value", "FOO": "NOT FOO"},
+            variables={
+                "BAR": EnvironmentVariableValueString(
+                    "BAR-value", context=ModelParsingContext_v2023_09()
+                ),
+                "FOO": EnvironmentVariableValueString(
+                    "NOT FOO", context=ModelParsingContext_v2023_09()
+                ),
+            },
         )
         session_id = uuid.uuid4().hex
         job_params = dict[str, ParameterValue]()
@@ -2661,7 +3024,16 @@ class TestEnvironmentVariablesInTasks_2023_09:
             script=EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
                     onEnter=Action_2023_09(
-                        command=sys.executable, args=["-c", "print('openjd_env: \"FOO=\"')"]
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString(
+                                "print('openjd_env: \"FOO=\"')",
+                                context=ModelParsingContext_v2023_09(),
+                            ),
+                        ],
                     )
                 )
             ),
@@ -2696,7 +3068,15 @@ class TestEnvironmentVariablesInTasks_2023_09:
             script=EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
                     onEnter=Action_2023_09(
-                        command=sys.executable, args=["-c", "print('openjd_env: FOO=')"]
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString(
+                                "print('openjd_env: FOO=')", context=ModelParsingContext_v2023_09()
+                            ),
+                        ],
                     )
                 )
             ),
@@ -2731,7 +3111,15 @@ class TestEnvironmentVariablesInTasks_2023_09:
             script=EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
                     onEnter=Action_2023_09(
-                        command=sys.executable, args=["-c", "print('openjd_env: FOO')"]
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString(
+                                "print('openjd_env: FOO')", context=ModelParsingContext_v2023_09()
+                            ),
+                        ],
                     )
                 )
             ),
@@ -2791,14 +3179,30 @@ class TestEnvironmentVariablesInTasks_2023_09:
         # GIVEN
         outer_environment = Environment_2023_09(
             name="EnvOuter",
-            variables={"BAR": "BAR-value", "FOO": "FOO-value"},
+            variables={
+                "BAR": EnvironmentVariableValueString(
+                    "BAR-value", context=ModelParsingContext_v2023_09()
+                ),
+                "FOO": EnvironmentVariableValueString(
+                    "FOO-value", context=ModelParsingContext_v2023_09()
+                ),
+            },
         )
         inner_environment = Environment_2023_09(
             name="EnvInner",
             script=EnvironmentScript_2023_09(
                 actions=EnvironmentActions_2023_09(
                     onEnter=Action_2023_09(
-                        command=sys.executable, args=["-c", "print('openjd_unset_env: FOO')"]
+                        command=CommandString(
+                            sys.executable, context=ModelParsingContext_v2023_09()
+                        ),
+                        args=[
+                            ArgString("-c", context=ModelParsingContext_v2023_09()),
+                            ArgString(
+                                "print('openjd_unset_env: FOO')",
+                                context=ModelParsingContext_v2023_09(),
+                            ),
+                        ],
                     )
                 )
             ),

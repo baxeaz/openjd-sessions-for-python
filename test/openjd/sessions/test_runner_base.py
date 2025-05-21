@@ -15,9 +15,14 @@ import pytest
 
 from openjd.model import SymbolTable
 from openjd.model.v2023_09 import Action as Action_2023_09
+from openjd.model.v2023_09 import ArgString as ArgString_2023_09
+from openjd.model.v2023_09 import CommandString as CommandString_2023_09
 from openjd.model.v2023_09 import DataString as DataString_2023_09
 from openjd.model.v2023_09 import (
     EmbeddedFileText as EmbeddedFileText_2023_09,
+)
+from openjd.model.v2023_09 import (
+    ModelParsingContext as ModelParsingContext_v2023_09,
 )
 from openjd.model.v2023_09 import (
     EmbeddedFileTypes as EmbeddedFileTypes_2023_09,
@@ -612,8 +617,10 @@ class TestScriptRunnerBase:
 
         # GIVEN
         action = Action_2023_09(
-            command="{{Task.PythonInterpreter}}",
-            args=["{{Task.ScriptFile}}"],
+            command=CommandString_2023_09(
+                "{{Task.PythonInterpreter}}", context=ModelParsingContext_v2023_09()
+            ),
+            args=[ArgString_2023_09("{{Task.ScriptFile}}", context=ModelParsingContext_v2023_09())],
             timeout=(5),
         )
         python_app_loc = (Path(__file__).parent / "support_files" / "app_20s_run.py").resolve()
@@ -672,8 +679,10 @@ class TestScriptRunnerBase:
             else None
         )
         action = Action_2023_09(
-            command="{{Task.PythonInterpreter}}",
-            args=["{{Task.ScriptFile}}"],
+            command=CommandString_2023_09(
+                "{{Task.PythonInterpreter}}", context=ModelParsingContext_v2023_09()
+            ),
+            args=[ArgString_2023_09("{{Task.ScriptFile}}", context=ModelParsingContext_v2023_09())],
             timeout=action_timeout_seconds,
         )
         python_app_loc = (Path(__file__).parent / "support_files" / "app_20s_run.py").resolve()
@@ -718,7 +727,11 @@ class TestScriptRunnerBase:
 
         # GIVEN
         action = Action_2023_09(
-            command="{{Task.PythonInterpreter}}", args=["{{Task.ScriptFile}}"], timeout=1
+            command=CommandString_2023_09(
+                "{{Task.PythonInterpreter}}", context=ModelParsingContext_v2023_09()
+            ),
+            args=[ArgString_2023_09("{{Task.ScriptFile}}", context=ModelParsingContext_v2023_09())],
+            timeout=1,
         )
         symtab = SymbolTable()
         logger = build_logger(queue_handler)
@@ -999,7 +1012,7 @@ class TestScriptRunnerBase:
                 name="Foo",
                 type=EmbeddedFileTypes_2023_09.TEXT,
                 filename="test_materialize_files.txt",
-                data=DataString_2023_09("some data"),
+                data=DataString_2023_09("some data", context=ModelParsingContext_v2023_09()),
             )
             symtab = SymbolTable()
 
@@ -1031,7 +1044,7 @@ class TestScriptRunnerBase:
                 name="Foo",
                 type=EmbeddedFileTypes_2023_09.TEXT,
                 filename="test_materialize_files.txt",
-                data=DataString_2023_09("some data"),
+                data=DataString_2023_09("some data", context=ModelParsingContext_v2023_09()),
             )
             symtab = SymbolTable()
 
